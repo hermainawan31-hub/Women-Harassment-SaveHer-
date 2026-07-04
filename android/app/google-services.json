@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "805087173127",
+    "project_id": "safeher-dd07d",
+    "storage_bucket": "safeher-dd07d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:805087173127:android:f6d2c4ea0099f19ca068a2",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyBAiCiUPn1MnYE53DJh7sgMOhqi6I5aI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:805087173127:android:2413c76e67509515a068a2",
+        "android_client_info": {
+          "package_name": "com.safeher.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyBAiCiUPn1MnYE53DJh7sgMOhqi6I5aI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
