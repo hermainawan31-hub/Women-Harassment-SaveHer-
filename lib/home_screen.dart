@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';          // added for firebase aut
-import 'package:cloud_firestore/cloud_firestore.dart';    // added for firebase auth
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'about_screen.dart';
 import 'emergency_contacts_screen.dart';
 import 'live_location.dart';
@@ -18,7 +19,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // when click icon it should go to login
   Future<void> logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
 
@@ -28,10 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // for displaying photo and name in drawer header:
   String? fullName;
   String? photoUrl;
+
   bool isProfileComplete = false;
+  bool isEmergencyContactsComplete = false;
+  bool isLocationActive = false; // ✅ NEW
 
   Future<void> loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -49,12 +51,28 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         fullName = data?["fullName"];
         photoUrl = data?["photoUrl"];
+
         isProfileComplete =
-      (data?["fullName"] ?? "").isNotEmpty &&
-      (data?["phone"] ?? "").isNotEmpty &&
-      (data?["address"] ?? "").isNotEmpty &&
-      (data?["bloodGroup"] ?? "").toString().isNotEmpty &&
-      (data?["gender"] ?? "").toString().isNotEmpty;
+            (data?["fullName"] ?? "").toString().isNotEmpty &&
+            (data?["phone"] ?? "").toString().isNotEmpty &&
+            (data?["address"] ?? "").toString().isNotEmpty &&
+            (data?["bloodGroup"] ?? "").toString().isNotEmpty &&
+            (data?["gender"] ?? "").toString().isNotEmpty;
+
+        isEmergencyContactsComplete =
+            (data?["contact1Name"] ?? "").toString().isNotEmpty &&
+            (data?["contact1Phone"] ?? "").toString().isNotEmpty &&
+            (data?["contact1Relation"] ?? "").toString().isNotEmpty &&
+            (data?["contact2Name"] ?? "").toString().isNotEmpty &&
+            (data?["contact2Phone"] ?? "").toString().isNotEmpty &&
+            (data?["contact2Relation"] ?? "").toString().isNotEmpty &&
+            (data?["contact3Name"] ?? "").toString().isNotEmpty &&
+            (data?["contact3Phone"] ?? "").toString().isNotEmpty &&
+            (data?["contact3Relation"] ?? "").toString().isNotEmpty;
+
+        // ✅ LOCATION CHECK ADDED
+        isLocationActive =
+            (data?["locationActive"] ?? false) == true;
       });
     }
   }
@@ -78,17 +96,15 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
-                Navigator.push(
+              Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
-              loadUserData();
+              ).then((_) => loadUserData());
             },
           ),
         ],
       ),
 
-      // drawer in safe area and use built‑in user account drawer header
       drawer: SafeArea(
         child: Drawer(
           child: ListView(
@@ -101,109 +117,109 @@ class _HomeScreenState extends State<HomeScreen> {
                       Color.fromARGB(255, 133, 15, 64),
                       Color.fromARGB(255, 107, 1, 61),
                     ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
                   ),
                 ),
                 currentAccountPicture: CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
                   backgroundImage:
                       photoUrl != null ? NetworkImage(photoUrl!) : null,
                   child: photoUrl == null
-                      ? const Icon(
-                          Icons.person,
-                          size: 45,
-                          color: Color(0xFF6C2BD9),
-                        )
+                      ? const Icon(Icons.person)
                       : null,
                 ),
-                accountName: Text(
-                  fullName ?? "Welcome to SafeHer",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                accountEmail: Text(
-                  user?.email ?? "No Email",
-                  style: const TextStyle(
-                    fontSize: 14,
-                  ),
-                ),
+                accountName: Text(fullName ?? "Welcome"),
+                accountEmail: Text(user?.email ?? ""),
               ),
+
               ListTile(
                 leading: const Icon(Icons.home),
                 title: const Text("Home"),
-                onTap: () {
-                  Navigator.pop(context); // Just close the drawer
-                },
+                onTap: () => Navigator.pop(context),
               ),
-             
+
               ListTile(
-                leading: Icon(Icons.contact_emergency),
-                title: Text("Emergency Contacts"),
+                leading: const Icon(Icons.contact_emergency),
+                title: const Text("Emergency Contacts"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const EmergencyContactsScreen()),
-                  );
+                    MaterialPageRoute(
+                      builder: (_) => const EmergencyContactsScreen(),
+                    ),
+                  ).then((_) => loadUserData());
                 },
               ),
+
               ListTile(
-                leading: Icon(Icons.location_on),
-                title: Text("Location"),
+                leading: const Icon(Icons.location_on),
+                title: const Text("Location"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const LiveLocation()),
-                  );
+                    MaterialPageRoute(
+                      builder: (_) => const LiveLocation(),
+                    ),
+                  ).then((_) => loadUserData());
                 },
               ),
+
               ListTile(
-                leading: Icon(Icons.history),
-                title: Text("SOS history"),
+                leading: const Icon(Icons.history),
+                title: const Text("SOS history"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const SosHistoryScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const SosHistoryScreen(),
+                    ),
                   );
                 },
               ),
+
               ListTile(
-                leading: Icon(Icons.safety_check),
-                title: Text("Safety Tips"),
+                leading: const Icon(Icons.safety_check),
+                title: const Text("Safety Tips"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const SafetyTipsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const SafetyTipsScreen(),
+                    ),
                   );
                 },
               ),
+
               ListTile(
-                leading: Icon(Icons.info_outline),
-                title: Text("About"),
+                leading: const Icon(Icons.info_outline),
+                title: const Text("About"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const AboutScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const AboutScreen(),
+                    ),
                   );
                 },
               ),
+
               ListTile(
-                leading: Icon(Icons.settings),
-                title: Text(" Settings"),
+                leading: const Icon(Icons.settings),
+                title: const Text("Settings"),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ),
                   );
                 },
               ),
-              Divider(),
+
+              const Divider(),
+
               ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text("Logout",style: TextStyle(color: Colors.red),),
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text("Logout",
+                    style: TextStyle(color: Colors.red)),
                 onTap: () => logout(context),
               ),
             ],
@@ -211,110 +227,74 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // now we will start building body of our SafeHer:
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // we made banner here :
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 216, 107, 143),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  // for adding content:
-                  child: Row(
-                    children: [
-                      // add icon and content in column in a row :
-                      const Icon(
-                        Icons.local_police,
-                        color: Colors.red,
-                        size: 45,
-                      ),
-                      const SizedBox(width: 16),
-                      // all content will be vertical so we will use column here :
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Emergency Helpline",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Center(
-                            child: const Text(
-                              "Police: 15\nRescue: 1122",
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            "Stay calm. Help is just one call away.",
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white70,
-                              fontStyle: FontStyle.italic,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-// so now we will do card here for completing profile card:
-                const SizedBox(height: 20),
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      radius: 25,
-                      child: Icon(Icons.person),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+
+            // PROFILE CARD
+            Card(
+              child: ListTile(
+                title: const Text("Complete Your Profile"),
+                subtitle: const Text("Add your personal info"),
+                trailing: isProfileComplete
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileScreen(),
                     ),
-                    title: const Text(
-                      "Complete Your Profile",
-                    ),
-                    subtitle: const Text(
-                      "Add your personal information",
-                    ),
-                    trailing: isProfileComplete
-                        ? const Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 30,
-                          )
-                        : const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ProfileScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                // here we will do make next card for adding contact :
-                // (you can add more cards here)
-              ],
+                  ).then((_) => loadUserData());
+                },
+              ),
             ),
-          ),
+
+            const SizedBox(height: 15),
+
+            // EMERGENCY CONTACTS
+            Card(
+              child: ListTile(
+                title: const Text("Emergency Contacts"),
+                subtitle: const Text("Add trusted contacts"),
+                trailing: isEmergencyContactsComplete
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const EmergencyContactsScreen(),
+                    ),
+                  ).then((_) => loadUserData());
+                },
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            // ✅ NEW: LIVE LOCATION CARD
+            Card(
+              child: ListTile(
+                title: const Text("Live Location"),
+                subtitle: const Text("Enable & share your location"),
+                trailing: isLocationActive
+                    ? const Icon(Icons.check_circle,
+                        color: Colors.green)
+                    : const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LiveLocation(),
+                    ),
+                  ).then((_) => loadUserData());
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
