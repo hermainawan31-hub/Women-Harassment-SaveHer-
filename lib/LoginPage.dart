@@ -112,12 +112,9 @@ class _LoginPageState extends State<LoginPage> {
       final user = _auth.currentUser;
 
       if (user != null && user.emailVerified) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
-        }
+        // No manual navigation needed here — AuthGate in main.dart listens
+        // to FirebaseAuth.authStateChanges() and will automatically swap
+        // to HomeScreen the moment sign-in succeeds.
       } else {
         await _auth.signOut();
         _showSnackBar("Please verify your email first.");

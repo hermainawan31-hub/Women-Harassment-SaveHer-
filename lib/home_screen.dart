@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'about_screen.dart';
 import 'emergency_contacts_screen.dart';
@@ -13,6 +17,7 @@ import 'settings_screen.dart';
 import 'sos_history_screen.dart';
 import 'LoginPage.dart';
 import 'app_colors.dart';
+import 'sos_notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +29,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   Future<void> logout(BuildContext context) async {
+    await SosNotificationService.cancel();
     await FirebaseAuth.instance.signOut();
 
     Navigator.pushReplacement(
@@ -39,7 +45,23 @@ class _HomeScreenState extends State<HomeScreen>
   bool isEmergencyContactsComplete = false;
   bool isLocationActive = false; // ✅ NEW
 
+  String? contact1Phone;
+  String? contact2Phone;
+  String? contact3Phone;
+
   bool isSendingSos = false;
+  bool isArmed = false;
+  int _volumePressCount = 0;
+  Timer? _armTimer;
+  StreamSubscription<dynamic>? _volumeEventSub;
+
+  static const MethodChannel _volumeMethodChannel = MethodChannel(
+    'safeher/volume_control',
+  );
+  static const EventChannel _volumeEventChannel = EventChannel(
+    'safeher/volume_events',
+  );
+  static const Duration _armWindow = Duration(days: 7);
 
   late final AnimationController _pulseController;
 
@@ -80,70 +102,144 @@ class _HomeScreenState extends State<HomeScreen>
 
         // ✅ LOCATION CHECK ADDED
         isLocationActive = (data?["locationActive"] ?? false) == true;
+
+        contact1Phone = data?["contact1Phone"];
+        contact2Phone = data?["contact2Phone"];
+        contact3Phone = data?["contact3Phone"];
       });
     }
   }
 
-  // ---------------- SOS ----------------
-  Future<void> _triggerSos() async {
+  // ---------------- SOS: ARM / DISARM (volume-button confirmation) ----------------
+  Future<void> _onSosTap() async {
+    if (isArmed) {
+      // Tapping again while armed cancels it.
+      await _disarmSos(message: "SOS cancelled.");
+      return;
+    }
+
+    setState(() {
+      isArmed = true;
+      _volumePressCount = 0;
+    });
+
+    try {
+      await _volumeMethodChannel.invokeMethod('setArmed', {'armed': true});
+    } catch (_) {
+      // If the platform channel isn't available (e.g. running on iOS/web),
+      // fall back to sending immediately so the feature still works.
+      await _disarmSos();
+      await _performSos();
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Press the Volume button twice within 10s to send SOS. Tap SOS again to cancel.",
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+
+    _volumeEventSub?.cancel();
+    _volumeEventSub = _volumeEventChannel.receiveBroadcastStream().listen((
+      _,
+    ) async {
+      _volumePressCount++;
+      if (_volumePressCount >= 2) {
+        await _disarmSos();
+        await _performSos();
+      }
+    });
+
+    _armTimer?.cancel();
+    _armTimer = Timer(_armWindow, () {
+      _disarmSos(message: "SOS confirmation timed out.");
+    });
+  }
+
+  Future<void> _disarmSos({String? message}) async {
+    _armTimer?.cancel();
+    _armTimer = null;
+    await _volumeEventSub?.cancel();
+    _volumeEventSub = null;
+
+    try {
+      await _volumeMethodChannel.invokeMethod('setArmed', {'armed': false});
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        isArmed = false;
+        _volumePressCount = 0;
+      });
+      if (message != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
+  // ---------------- SOS: actual send, runs once confirmed ----------------
+  Future<void> _performSos() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Send SOS Alert?"),
-        content: const Text(
-          "This will notify your emergency contacts and log this alert in your SOS history.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.accent),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              "Send SOS",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
     setState(() => isSendingSos = true);
 
-    String address = "Location unavailable";
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (serviceEnabled) {
-        LocationPermission permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-        }
-        if (permission != LocationPermission.denied &&
-            permission != LocationPermission.deniedForever) {
-          final position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-          );
-          final placemarks = await placemarkFromCoordinates(
-            position.latitude,
-            position.longitude,
-          );
-          address =
-              "${placemarks.first.street}, ${placemarks.first.locality}, ${placemarks.first.country}";
-        }
+    // ---- Check & request location permission up front ----
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        setState(() => isSendingSos = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please turn on location services to send SOS."),
+          ),
+        );
       }
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        setState(() => isSendingSos = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Location permission is required to send SOS."),
+          ),
+        );
+      }
+      return;
+    }
+
+    String address = "Location unavailable";
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      address =
+          "${placemarks.first.street}, ${placemarks.first.locality}, ${placemarks.first.country}";
     } catch (_) {
-      // fall back to "Location unavailable"
+      // fall back to "Location unavailable" — SMS still sends without coordinates.
     }
 
     try {
+      // 1) log this alert in the user's own SOS history
       await FirebaseFirestore.instance
           .collection("users")
           .doc(user.uid)
@@ -154,10 +250,48 @@ class _HomeScreenState extends State<HomeScreen>
             "status": "Sent",
           });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("SOS alert sent. Stay safe.")),
+      // 2) build the emergency message with a plain Google Maps link
+      //    (no hosting/deployment required — this opens directly in Maps)
+      final mapsLink = position != null
+          ? "https://maps.google.com/?q=${position.latitude},${position.longitude}"
+          : null;
+
+      final message =
+          "🚨 SOS Alert from ${fullName ?? 'me'}! I need help right now.\n"
+          "My location: $address"
+          "${mapsLink != null ? '\nMap: $mapsLink' : ''}";
+
+      // 3) text it directly to the saved emergency contacts
+      final numbers = [contact1Phone, contact2Phone, contact3Phone]
+          .where((n) => n != null && n.trim().isNotEmpty)
+          .map((n) => n!.trim())
+          .toList();
+
+      if (numbers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "No emergency contacts saved yet — add some first.",
+              ),
+            ),
+          );
+        }
+      } else {
+        // sms: URI with comma-separated recipients pre-fills the SMS app
+        // with all saved numbers already in the "To" field.
+        final smsUri = Uri(
+          scheme: 'sms',
+          path: numbers.join(','),
+          queryParameters: {'body': message},
         );
+
+        final launched = await launchUrl(smsUri);
+
+        if (!launched && mounted) {
+          // fallback if the SMS app can't be opened directly on this device
+          await Share.share(message, subject: "SafeHer SOS Alert");
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -174,6 +308,7 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     loadUserData();
+    SosNotificationService.showPersistentSosNotification();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -183,6 +318,12 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _pulseController.dispose();
+    _armTimer?.cancel();
+    _volumeEventSub?.cancel();
+    // best-effort disarm on native side; fire-and-forget since dispose can't await
+    _volumeMethodChannel
+        .invokeMethod('setArmed', {'armed': false})
+        .catchError((_) {});
     super.dispose();
   }
 
@@ -676,6 +817,124 @@ class _HomeScreenState extends State<HomeScreen>
 
             // ---- Big pulsing SOS button ----
             Padding(
+              padding: const EdgeInsets.symmetric(vertical: 26),
+              child: Center(
+                child: GestureDetector(
+                  onTap: isSendingSos ? null : _onSosTap,
+                  child: AnimatedBuilder(
+                    animation: _pulseController,
+                    builder: (context, child) {
+                      final pulse = (1 - (_pulseController.value)).clamp(
+                        0.0,
+                        1.0,
+                      );
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 130 + (30 * (1 - pulse)),
+                            height: 130 + (30 * (1 - pulse)),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  (isArmed ? Colors.orange : AppColors.accent)
+                                      .withOpacity(0.25 * pulse),
+                            ),
+                          ),
+                          child!,
+                        ],
+                      );
+                    },
+                    child: Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: isArmed
+                            ? const LinearGradient(
+                                colors: [Colors.orange, AppColors.accent],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : const LinearGradient(
+                                colors: [AppColors.accent, AppColors.primary],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isArmed ? Colors.orange : AppColors.accent)
+                                .withOpacity(0.45),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: isSendingSos
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : isArmed
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.volume_up_rounded,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _volumePressCount == 0
+                                      ? "Press Vol x2"
+                                      : "1 more…",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.sos_rounded,
+                                  color: Colors.white,
+                                  size: 34,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  "SOS",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: Text(
+                isArmed
+                    ? "Press Volume Up/Down twice to confirm — tap SOS to cancel"
+                    : "Tap in an emergency to alert your saved contacts",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textDark.withOpacity(0.45),
+                ),
+              ),
+            ),
+
+            Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
@@ -722,92 +981,6 @@ class _HomeScreenState extends State<HomeScreen>
                         MaterialPageRoute(builder: (_) => const LiveLocation()),
                       ).then((_) => loadUserData());
                     },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 26),
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: isSendingSos ? null : _triggerSos,
-                        child: AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            final pulse = (1 - (_pulseController.value)).clamp(
-                              0.0,
-                              1.0,
-                            );
-                            return Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Container(
-                                  width: 130 + (30 * (1 - pulse)),
-                                  height: 130 + (30 * (1 - pulse)),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppColors.accent.withOpacity(
-                                      0.25 * pulse,
-                                    ),
-                                  ),
-                                ),
-                                child!,
-                              ],
-                            );
-                          },
-                          child: Container(
-                            width: 130,
-                            height: 130,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [AppColors.accent, AppColors.primary],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.accent.withOpacity(0.45),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            alignment: Alignment.center,
-                            child: isSendingSos
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : const Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.sos_rounded,
-                                        color: Colors.white,
-                                        size: 34,
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        "SOS",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          letterSpacing: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: Text(
-                      "Tap in an emergency to alert your contacts",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textDark.withOpacity(0.45),
-                      ),
-                    ),
                   ),
                 ],
               ),
