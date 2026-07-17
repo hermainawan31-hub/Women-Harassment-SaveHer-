@@ -1,7 +1,13 @@
+
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+
+import 'package:audioplayers/audioplayers.dart';
 
 import 'app_colors.dart';
 
@@ -128,10 +134,25 @@ class SosHistoryScreen extends StatelessWidget {
                           final String status = (data["status"] ?? "Sent")
                               .toString();
 
+                          final int chunkCount =
+                              (data["recordingChunkCount"] as num?)
+                                  ?.toInt() ??
+                              0;
+                          final bool hasRecording =
+                              chunkCount > 0 ||
+                              (data["recordingBase64"] as String?)
+                                      ?.trim()
+                                      .isNotEmpty ==
+                                  true;
+
+
                           return _HistoryCard(
                             dateTime: dateTime,
                             address: address,
                             status: status,
+                            hasRecording: hasRecording,
+                            eventRef: docs[index].reference,
+
                           );
                         },
                       );
@@ -149,10 +170,17 @@ class _HistoryCard extends StatelessWidget {
   final String address;
   final String status;
 
+  final bool hasRecording;
+  final DocumentReference<Map<String, dynamic>> eventRef;
+
   const _HistoryCard({
     required this.dateTime,
     required this.address,
     required this.status,
+
+    required this.hasRecording,
+    required this.eventRef,
+
   });
 
   Color get _statusColor {
@@ -222,6 +250,13 @@ class _HistoryCard extends StatelessWidget {
                     color: AppColors.textDark.withOpacity(0.55),
                   ),
                 ),
+
+
+                if (hasRecording) ...[
+                  const SizedBox(height: 8),
+                  _RecordingPlayButton(eventRef: eventRef),
+                ],
+
               ],
             ),
           ),
@@ -245,6 +280,135 @@ class _HistoryCard extends StatelessWidget {
     );
   }
 }
+
+class _RecordingPlayButton extends StatefulWidget {
+  final DocumentReference<Map<String, dynamic>> eventRef;
+  const _RecordingPlayButton({required this.eventRef});
+
+  @override
+  State<_RecordingPlayButton> createState() => _RecordingPlayButtonState();
+}
+
+class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
+  final AudioPlayer _player = AudioPlayer();
+  bool isPlaying = false;
+  bool isLoading = false;
+  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<void>? _completeSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _stateSub = _player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() => isPlaying = state == PlayerState.playing);
+    });
+    _completeSub = _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() => isPlaying = false);
+    });
+  }
+
+  Future<void> _toggle() async {
+    if (isPlaying) {
+      await _player.pause();
+      return;
+    }
+
+    setState(() => isLoading = true);
+    try {
+      final eventSnap = await widget.eventRef.get();
+      final data = eventSnap.data();
+
+      // Legacy fallback: a couple of early recordings were saved as a
+      // single "recordingBase64" field before chunking was added.
+      final legacy = data?["recordingBase64"] as String?;
+
+      String base64Audio;
+      if (legacy != null && legacy.trim().isNotEmpty) {
+        base64Audio = legacy;
+      } else {
+        final chunksSnap = await widget.eventRef
+            .collection("recording_chunks")
+            .orderBy("index")
+            .get();
+
+        if (chunksSnap.docs.isEmpty) {
+          throw Exception("No recording found");
+        }
+
+        base64Audio = chunksSnap.docs
+            .map((d) => d.data()["data"] as String)
+            .join();
+      }
+
+      final bytes = base64Decode(base64Audio);
+      await _player.play(BytesSource(bytes));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't play recording.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _stateSub?.cancel();
+    _completeSub?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: isLoading ? null : _toggle,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : Icon(
+                    isPlaying
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_fill,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+            const SizedBox(width: 6),
+            Text(
+              isPlaying ? "Playing…" : "Play recording",
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _EmptyState extends StatelessWidget {
   final String message;

@@ -18,6 +18,7 @@ import 'sos_history_screen.dart';
 import 'LoginPage.dart';
 import 'app_colors.dart';
 import 'sos_notification_service.dart';
+import 'sos_recording_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,6 +52,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   bool isSendingSos = false;
   bool isArmed = false;
+
+
+  bool isRecordingSos = false;
+
   int _volumePressCount = 0;
   Timer? _armTimer;
   StreamSubscription<dynamic>? _volumeEventSub;
@@ -234,21 +239,32 @@ class _HomeScreenState extends State<HomeScreen>
       );
       address =
           "${placemarks.first.street}, ${placemarks.first.locality}, ${placemarks.first.country}";
-    } catch (_) {
-      // fall back to "Location unavailable" — SMS still sends without coordinates.
+    } catch (_) {  
     }
-
     try {
-      // 1) log this alert in the user's own SOS history
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .collection("sos_events")
-          .add({
-            "timestamp": FieldValue.serverTimestamp(),
-            "address": address,
-            "status": "Sent",
-          });
+  // 1) log this alert in the user's own SOS history
+
+  final sosEventRef = await FirebaseFirestore.instance
+      .collection("users")
+      .doc(user.uid)
+      .collection("sos_events")
+      .add({
+        "timestamp": FieldValue.serverTimestamp(),
+        "address": address,
+        "status": "Sent",
+      });
+
+
+      // 1b) start recording audio tied to this SOS event. This begins
+      //     immediately and keeps going until the user taps "Stop
+      //     Recording" — it runs on its own (fire-and-forget) so it never
+      //     delays or changes anything in the SMS/location flow below.
+      // ignore: unawaited_futures
+      SosRecordingService.start(sosEventRef.id).then((_) {
+        if (mounted) {
+          setState(() => isRecordingSos = SosRecordingService.isRecording);
+        }
+      });
 
       // 2) build the emergency message with a plain Google Maps link
       //    (no hosting/deployment required — this opens directly in Maps)
@@ -303,6 +319,33 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) setState(() => isSendingSos = false);
     }
   }
+
+  // ---------------- SOS: stop the in-progress recording ----------------
+  Future<void> _stopSosRecording() async {
+    final numbers = [contact1Phone, contact2Phone, contact3Phone]
+        .where((n) => n != null && n.trim().isNotEmpty)
+        .map((n) => n!.trim())
+        .toList();
+
+    final saved = await SosRecordingService.stopAndSave(
+      contactNumbers: numbers,
+      callerName: fullName,
+    );
+
+    if (mounted) {
+      setState(() => isRecordingSos = false);
+      if (!saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Couldn't save the recording — please check your connection.",
+            ),
+          ),
+        );
+      }
+    }
+  }
+
 
   @override
   void initState() {
@@ -933,6 +976,32 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+
+
+
+            if (isRecordingSos)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Center(
+                  child: ElevatedButton.icon(
+                    onPressed: _stopSosRecording,
+                    icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                    label: const Text("Stop Recording"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
 
             Padding(
               padding: const EdgeInsets.all(20),
