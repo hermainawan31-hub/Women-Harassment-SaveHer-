@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'about_screen.dart';
 import 'emergency_contacts_screen.dart';
@@ -19,6 +15,7 @@ import 'LoginPage.dart';
 import 'app_colors.dart';
 import 'sos_notification_service.dart';
 import 'sos_recording_service.dart';
+import 'safeher_sos_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,50 +26,49 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  Future<void> logout(BuildContext context) async {
-    await SosNotificationService.cancel();
-    await FirebaseAuth.instance.signOut();
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
-  }
-
+  // ---- User data ----
   String? fullName;
   String? photoUrl;
-
   bool isProfileComplete = false;
   bool isEmergencyContactsComplete = false;
-  bool isLocationActive = false; // ✅ NEW
-
+  bool isLocationActive = false;
   String? contact1Phone;
   String? contact2Phone;
   String? contact3Phone;
 
+  // ---- SOS states ----
   bool isSendingSos = false;
-  bool isArmed = false;
-
-
   bool isRecordingSos = false;
-
+  bool isArmed = false;
   int _volumePressCount = 0;
   Timer? _armTimer;
   StreamSubscription<dynamic>? _volumeEventSub;
 
-  static const MethodChannel _volumeMethodChannel = MethodChannel(
-    'safeher/volume_control',
-  );
-  static const EventChannel _volumeEventChannel = EventChannel(
-    'safeher/volume_events',
-  );
-  static const Duration _armWindow = Duration(days: 7);
+  // ---- Channels ----
+  static const MethodChannel _volumeMethodChannel =
+      MethodChannel('safeher/volume_control');
+  static const EventChannel _volumeEventChannel =
+      EventChannel('safeher/volume_events');
+  static const MethodChannel _widgetChannel =
+      MethodChannel("safeher/widget");
 
   late final AnimationController _pulseController;
 
+  // ---- Logout ----
+  Future<void> logout(BuildContext context) async {
+    await SosNotificationService.cancel();
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    }
+  }
+
+  // ---- Load user data ----
   Future<void> loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
-
     if (user == null) return;
 
     final document = await FirebaseFirestore.instance
@@ -82,18 +78,15 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (document.exists) {
       final data = document.data();
-
       setState(() {
         fullName = data?["fullName"];
         photoUrl = data?["photoUrl"];
-
         isProfileComplete =
             (data?["fullName"] ?? "").toString().isNotEmpty &&
             (data?["phone"] ?? "").toString().isNotEmpty &&
             (data?["address"] ?? "").toString().isNotEmpty &&
             (data?["bloodGroup"] ?? "").toString().isNotEmpty &&
             (data?["gender"] ?? "").toString().isNotEmpty;
-
         isEmergencyContactsComplete =
             (data?["contact1Name"] ?? "").toString().isNotEmpty &&
             (data?["contact1Phone"] ?? "").toString().isNotEmpty &&
@@ -104,10 +97,7 @@ class _HomeScreenState extends State<HomeScreen>
             (data?["contact3Name"] ?? "").toString().isNotEmpty &&
             (data?["contact3Phone"] ?? "").toString().isNotEmpty &&
             (data?["contact3Relation"] ?? "").toString().isNotEmpty;
-
-        //  LOCATION CHECK ADDED
         isLocationActive = (data?["locationActive"] ?? false) == true;
-
         contact1Phone = data?["contact1Phone"];
         contact2Phone = data?["contact2Phone"];
         contact3Phone = data?["contact3Phone"];
@@ -115,10 +105,9 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ---------------- SOS: ARM / DISARM (volume-button confirmation) ----------------
+  // ---- SOS: ARM (wait for volume) ----
   Future<void> _onSosTap() async {
     if (isArmed) {
-      // Tapping again while armed cancels it.
       await _disarmSos(message: "SOS cancelled.");
       return;
     }
@@ -131,8 +120,7 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       await _volumeMethodChannel.invokeMethod('setArmed', {'armed': true});
     } catch (_) {
-      // If the platform channel isn't available (e.g. running on iOS/web),
-      // fall back to sending immediately so the feature still works.
+      // Fallback: send immediately if volume channel not available
       await _disarmSos();
       await _performSos();
       return;
@@ -142,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Press the Volume button twice within 10s to send SOS. Tap SOS again to cancel.",
+            "Press Volume Up twice within 10s to send SOS. Tap SOS again to cancel.",
           ),
           duration: Duration(seconds: 4),
         ),
@@ -161,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     _armTimer?.cancel();
-    _armTimer = Timer(_armWindow, () {
+    _armTimer = Timer(const Duration(seconds: 10), () {
       _disarmSos(message: "SOS confirmation timed out.");
     });
   }
@@ -189,138 +177,22 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ---------------- SOS: actual send, runs once confirmed ----------------
+  // ---- SOS: actual send (runs once confirmed) ----
   Future<void> _performSos() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (isSendingSos) return;
 
     setState(() => isSendingSos = true);
 
-    // ---- Check & request location permission up front ----
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        setState(() => isSendingSos = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Please turn on location services to send SOS."),
-          ),
-        );
-      }
-      return;
-    }
+    // Call the unified SOS service
+    await SafeHerSOSService.startSOS();
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        setState(() => isSendingSos = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Location permission is required to send SOS."),
-          ),
-        );
-      }
-      return;
-    }
-
-    String address = "Location unavailable";
-    Position? position;
-    try {
-      position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      address =
-          "${placemarks.first.street}, ${placemarks.first.locality}, ${placemarks.first.country}";
-    } catch (_) {  
-    }
-    try {
-  // 1) log this alert in the user's own SOS history
-
-  final sosEventRef = await FirebaseFirestore.instance
-      .collection("users")
-      .doc(user.uid)
-      .collection("sos_events")
-      .add({
-        "timestamp": FieldValue.serverTimestamp(),
-        "address": address,
-        "status": "Sent",
-      });
-
-
-      // 1b) start recording audio tied to this SOS event. This begins
-      //     immediately and keeps going until the user taps "Stop
-      //     Recording" — it runs on its own (fire-and-forget) so it never
-      //     delays or changes anything in the SMS/location flow below.
-      // ignore: unawaited_futures
-      SosRecordingService.start(sosEventRef.id).then((_) {
-        if (mounted) {
-          setState(() => isRecordingSos = SosRecordingService.isRecording);
-        }
-      });
-
-      // 2) build the emergency message with a plain Google Maps link
-      //    (no hosting/deployment required — this opens directly in Maps)
-      final mapsLink = position != null
-          ? "https://maps.google.com/?q=${position.latitude},${position.longitude}"
-          : null;
-
-      final message =
-          "🚨 SOS Alert from ${fullName ?? 'me'}! I need help right now.\n"
-          "My location: $address"
-          "${mapsLink != null ? '\nMap: $mapsLink' : ''}";
-
-      // 3) text it directly to the saved emergency contacts
-      final numbers = [contact1Phone, contact2Phone, contact3Phone]
-          .where((n) => n != null && n.trim().isNotEmpty)
-          .map((n) => n!.trim())
-          .toList();
-
-      if (numbers.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "No emergency contacts saved yet — add some first.",
-              ),
-            ),
-          );
-        }
-      } else {
-        // sms: URI with comma-separated recipients pre-fills the SMS app
-        // with all saved numbers already in the "To" field.
-        final smsUri = Uri(
-          scheme: 'sms',
-          path: numbers.join(','),
-          queryParameters: {'body': message},
-        );
-
-        final launched = await launchUrl(smsUri);
-
-        if (!launched && mounted) {
-          // fallback if the SMS app can't be opened directly on this device
-          await Share.share(message, subject: "SafeHer SOS Alert");
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Couldn't send SOS: $e")));
-      }
-    } finally {
-      if (mounted) setState(() => isSendingSos = false);
-    }
+    setState(() {
+      isRecordingSos = SosRecordingService.isRecording;
+      isSendingSos = false;
+    });
   }
 
-  // ---------------- SOS: stop the in-progress recording ----------------
+  // ---- Stop recording ----
   Future<void> _stopSosRecording() async {
     final numbers = [contact1Phone, contact2Phone, contact3Phone]
         .where((n) => n != null && n.trim().isNotEmpty)
@@ -337,25 +209,30 @@ class _HomeScreenState extends State<HomeScreen>
       if (!saved) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              "Couldn't save the recording — please check your connection.",
-            ),
+            content: Text("Couldn't save the recording — check connection."),
           ),
         );
       }
     }
   }
 
-
   @override
   void initState() {
     super.initState();
     loadUserData();
     SosNotificationService.showPersistentSosNotification();
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
+
+    // Listen for widget triggers
+    _widgetChannel.setMethodCallHandler((call) async {
+      if (call.method == "triggerSos") {
+        await _performSos();
+      }
+    });
   }
 
   @override
@@ -363,14 +240,13 @@ class _HomeScreenState extends State<HomeScreen>
     _pulseController.dispose();
     _armTimer?.cancel();
     _volumeEventSub?.cancel();
-    // best-effort disarm on native side; fire-and-forget since dispose can't await
     _volumeMethodChannel
         .invokeMethod('setArmed', {'armed': false})
         .catchError((_) {});
     super.dispose();
   }
 
-  // ---------------- REUSABLE DASHBOARD CARD ----------------
+  // ---- UI helpers ----
   Widget _dashboardCard({
     required IconData icon,
     required String title,
@@ -474,7 +350,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ---------------- QUICK ACTION CHIP ----------------
   Widget _quickAction({
     required IconData icon,
     required String label,
@@ -551,7 +426,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-
       drawer: SafeArea(
         child: Drawer(
           child: ListView(
@@ -571,9 +445,8 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: Colors.white,
-                  backgroundImage: photoUrl != null
-                      ? NetworkImage(photoUrl!)
-                      : null,
+                  backgroundImage:
+                      photoUrl != null ? NetworkImage(photoUrl!) : null,
                   child: photoUrl == null
                       ? const Icon(Icons.person, color: AppColors.primary)
                       : null,
@@ -584,7 +457,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 accountEmail: Text(user?.email ?? ""),
               ),
-
               _drawerTile(
                 icon: Icons.home_rounded,
                 title: "Home",
@@ -652,9 +524,7 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 },
               ),
-
               const Divider(height: 24),
-
               _drawerTile(
                 icon: Icons.logout_rounded,
                 title: "Logout",
@@ -665,12 +535,11 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
-
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---- Gradient header with avatar, greeting, quick actions, progress ----
+            // ---- Gradient header ----
             ClipRRect(
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(28),
@@ -692,7 +561,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 child: Stack(
                   children: [
-                    // decorative soft circles
                     Positioned(
                       top: -40,
                       right: -30,
@@ -717,7 +585,6 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                       ),
                     ),
-
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -735,9 +602,10 @@ class _HomeScreenState extends State<HomeScreen>
                               child: CircleAvatar(
                                 radius: 26,
                                 backgroundColor: Colors.white,
-                                backgroundImage: photoUrl != null
-                                    ? NetworkImage(photoUrl!)
-                                    : null,
+                                backgroundImage:
+                                    photoUrl != null
+                                        ? NetworkImage(photoUrl!)
+                                        : null,
                                 child: photoUrl == null
                                     ? const Icon(
                                         Icons.person,
@@ -772,10 +640,7 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
-
-                        // ---- Quick action row ----
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -830,7 +695,6 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 22),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
@@ -857,8 +721,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-
-            // ---- Big pulsing SOS button ----
+            // ---- Big SOS button (with arm state) ----
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 26),
               child: Center(
@@ -879,9 +742,8 @@ class _HomeScreenState extends State<HomeScreen>
                             height: 130 + (30 * (1 - pulse)),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color:
-                                  (isArmed ? Colors.orange : AppColors.accent)
-                                      .withOpacity(0.25 * pulse),
+                              color: (isArmed ? Colors.orange : AppColors.accent)
+                                  .withOpacity(0.25 * pulse),
                             ),
                           ),
                           child!,
@@ -967,7 +829,7 @@ class _HomeScreenState extends State<HomeScreen>
             Center(
               child: Text(
                 isArmed
-                    ? "Press Volume Up/Down twice to confirm — tap SOS to cancel"
+                    ? "Press Volume Up twice to confirm — tap SOS to cancel"
                     : "Tap in an emergency to alert your saved contacts",
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -976,9 +838,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-
-
-
             if (isRecordingSos)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -1001,8 +860,6 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
               ),
-
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -1022,7 +879,6 @@ class _HomeScreenState extends State<HomeScreen>
                     },
                   ),
                   const SizedBox(height: 14),
-
                   _dashboardCard(
                     icon: Icons.contact_emergency_outlined,
                     title: "Emergency Contacts",
@@ -1038,7 +894,6 @@ class _HomeScreenState extends State<HomeScreen>
                     },
                   ),
                   const SizedBox(height: 14),
-
                   _dashboardCard(
                     icon: Icons.location_on_outlined,
                     title: "Live Location",
@@ -1047,7 +902,9 @@ class _HomeScreenState extends State<HomeScreen>
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const LiveLocation()),
+                        MaterialPageRoute(
+                          builder: (_) => const LiveLocation(),
+                        ),
                       ).then((_) => loadUserData());
                     },
                   ),

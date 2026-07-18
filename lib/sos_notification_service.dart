@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'sos_recording_service.dart';
 
 import 'firebase_options.dart';
 
@@ -26,7 +27,7 @@ final FlutterLocalNotificationsPlugin _notificationsPlugin =
 @pragma('vm:entry-point')
 void notificationTapBackgroundHandler(NotificationResponse response) {
   if (response.actionId == kSosActionId) {
-    _sendSosFromBackground();
+    sendSosFromBackground();
   }
 }
 
@@ -42,7 +43,7 @@ class SosNotificationService {
         // Handles the tap while the app process is still alive (foreground
         // or background-but-not-killed).
         if (response.actionId == kSosActionId) {
-          _sendSosFromBackground();
+          sendSosFromBackground();
         }
       },
       onDidReceiveBackgroundNotificationResponse:
@@ -116,7 +117,7 @@ class SosNotificationService {
 // re-fetches everything it needs from scratch, since the app process may
 // have been fully killed when this fires.
 // ---------------------------------------------------------------------------
-Future<void> _sendSosFromBackground() async {
+Future<void> sendSosFromBackground() async {
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
@@ -168,15 +169,18 @@ Future<void> _sendSosFromBackground() async {
       // fall back to "Location unavailable"
     }
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('sos_events')
-        .add({
-          'timestamp': FieldValue.serverTimestamp(),
-          'address': address,
-          'status': 'Sent (notification)',
-        });
+    final sosEventRef = await FirebaseFirestore.instance
+    .collection('users')
+    .doc(user.uid)
+    .collection('sos_events')
+    .add({
+      'timestamp': FieldValue.serverTimestamp(),
+      'address': address,
+      'status': 'Sent (background)',
+    });
+
+// Start recording immediately (fire-and-forget).
+SosRecordingService.start(sosEventRef.id);
 
     final mapsLink = (lat != null && lng != null)
         ? "https://maps.google.com/?q=$lat,$lng"

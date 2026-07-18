@@ -52,30 +52,43 @@ class SosRecordingService {
 
   /// Starts recording immediately and keeps recording until [stopAndSave]
   /// is called. Does not upload/save anything by itself.
-  static Future<void> start(String sosEventId) async {
-    try {
-      final hasPermission = await _recorder.hasPermission();
-      if (!hasPermission) return; // mic permission refused - skip silently
+ static Future<void> start(String sosEventId) async {
+  try {
+    print("===== RECORD START =====");
 
-      final dir = await getTemporaryDirectory();
-      final fileName =
-          "sos_${sosEventId}_${DateTime.now().millisecondsSinceEpoch}.m4a";
-      final filePath = "${dir.path}/$fileName";
+    final hasPermission = await _recorder.hasPermission();
+    print("Permission: $hasPermission");
 
-      await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc),
-        path: filePath,
-      );
-
-      _activeSosEventId = sosEventId;
-      _activeFilePath = filePath;
-      _activeFileName = fileName;
-    } catch (_) {
-      _activeSosEventId = null;
-      _activeFilePath = null;
-      _activeFileName = null;
+    if (!hasPermission) {
+      print("No microphone permission");
+      return;
     }
+
+    final dir = await getTemporaryDirectory();
+
+    final path =
+        "${dir.path}/sos_${DateTime.now().millisecondsSinceEpoch}.m4a";
+
+    print(path);
+
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
+      ),
+      path: path,
+    );
+
+    print("Recorder started");
+
+    _activeSosEventId = sosEventId;
+    _activeFilePath = path;
+    _activeFileName = path.split("/").last;
+
+  } catch (e) {
+    print("Recorder Exception:");
+    print(e);
   }
+}
 
   /// Stops the current recording (if any), saves it entirely inside
   /// Firestore (chunked, with its file name) and opens the share sheet so
@@ -176,11 +189,11 @@ class SosRecordingService {
       }
 
       return true;
-    } catch (_) {
-      // Save failed (e.g. no network, permissions) — caller decides how
-      // to inform the user.
-      return false;
-    } finally {
+    } catch (e) {
+  print("Stop Recording Error:");
+  print(e);
+  return false;
+} finally {
       // Clean up the local temp copy either way.
       if (file != null) {
         unawaited(file.delete().catchError((_) => file!));

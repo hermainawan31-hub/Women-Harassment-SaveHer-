@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart'; // ✅ ADD THIS
 
 import 'firebase_options.dart';
 import 'LoginPage.dart';
@@ -14,7 +15,35 @@ Future<void> main() async {
 
   await SosNotificationService.init();
 
+  // ✅ Request all required permissions ONCE at startup
+  await _requestPermissions();
+
   runApp(const SafeHerApp());
+}
+
+/// Request microphone, location, and notification permissions once.
+/// This avoids repeated dialogs and ensures they are granted before any SOS.
+Future<void> _requestPermissions() async {
+  // List of permissions needed
+  final permissions = [
+    Permission.microphone,
+    Permission.location,
+    Permission.locationAlways,
+    Permission.notification,
+  ];
+
+  // Request them all at once
+  final statuses = await permissions.request();
+
+  // Log the results for debugging
+  for (final entry in statuses.entries) {
+    print('${entry.key}: ${entry.value}');
+  }
+
+  // If any permission is permanently denied, open app settings
+  if (statuses.values.any((s) => s.isPermanentlyDenied)) {
+    await openAppSettings();
+  }
 }
 
 class SafeHerApp extends StatelessWidget {
@@ -31,12 +60,7 @@ class SafeHerApp extends StatelessWidget {
   }
 }
 
-/// Decides the very first screen shown, every time the app is opened —
-/// whether that's tapping the app icon, tapping the persistent SOS
-/// notification, or resuming from the task switcher.
-///
-/// If a signed-in session already exists, it goes straight to HomeScreen
-/// instead of forcing the user through LoginPage again.
+/// Decides the very first screen shown, every time the app is opened.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -45,18 +69,14 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Still checking Firebase's cached session — show a brief loader
-        // instead of flashing the login screen first.
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
         if (snapshot.hasData) {
           return const HomeScreen();
         }
-
         return const LoginPage();
       },
     );
