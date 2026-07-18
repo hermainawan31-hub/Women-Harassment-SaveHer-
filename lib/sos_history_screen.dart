@@ -1,12 +1,9 @@
-
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-
 import 'package:audioplayers/audioplayers.dart';
 
 import 'app_colors.dart';
@@ -74,7 +71,7 @@ class SosHistoryScreen extends StatelessWidget {
                 const SizedBox(width: 14),
                 const Expanded(
                   child: Text(
-                    "A record of every SOS alert you've triggered.",
+                    "Tap any event to see the full details.",
                     style: TextStyle(fontSize: 14, color: Colors.white),
                   ),
                 ),
@@ -99,7 +96,8 @@ class SosHistoryScreen extends StatelessWidget {
                     builder: (context, snapshot) {
                       if (snapshot.hasError) {
                         return _EmptyState(
-                          message: "Couldn't load history.\n${snapshot.error}",
+                          message:
+                              "Couldn't load history.\n${snapshot.error}",
                         );
                       }
 
@@ -123,36 +121,45 @@ class SosHistoryScreen extends StatelessWidget {
                       return ListView.separated(
                         padding: const EdgeInsets.all(20),
                         itemCount: docs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
                         itemBuilder: (context, index) {
                           final data = docs[index].data();
+                          final eventRef = docs[index].reference;
+
+                          // ✅ FIELDS FROM YOUR FIRESTORE
                           final Timestamp? ts = data["timestamp"] as Timestamp?;
                           final DateTime? dateTime = ts?.toDate();
+
                           final String address =
                               (data["address"] ?? "Unknown location")
                                   .toString();
-                          final String status = (data["status"] ?? "Sent")
-                              .toString();
 
-                          final int chunkCount =
-                              (data["recordingChunkCount"] as num?)
-                                  ?.toInt() ??
-                              0;
+                          final String status =
+                              (data["status"] ?? "Sent").toString();
+
+                          final int recordingChunkCount =
+                              (data["recordingChunkCount"] as num?)?.toInt() ??
+                                  0;
+
+                          final String recordingName =
+                              (data["recordingName"] ?? "").toString();
+
+                          final String recordingSavedAt =
+                              (data["recordingSavedAt"] ?? "").toString();
+
                           final bool hasRecording =
-                              chunkCount > 0 ||
-                              (data["recordingBase64"] as String?)
-                                      ?.trim()
-                                      .isNotEmpty ==
-                                  true;
+                              recordingChunkCount > 0 ||
+                              recordingName.isNotEmpty;
 
-
-                          return _HistoryCard(
+                          return _ExpandableHistoryCard(
                             dateTime: dateTime,
                             address: address,
                             status: status,
+                            recordingChunkCount: recordingChunkCount,
+                            recordingName: recordingName,
+                            recordingSavedAt: recordingSavedAt,
                             hasRecording: hasRecording,
-                            eventRef: docs[index].reference,
-
+                            eventRef: eventRef,
                           );
                         },
                       );
@@ -165,34 +172,29 @@ class SosHistoryScreen extends StatelessWidget {
   }
 }
 
-class _HistoryCard extends StatelessWidget {
+// ============================================================
+// EXPANDABLE CARD (using ExpansionTile)
+// ============================================================
+class _ExpandableHistoryCard extends StatelessWidget {
   final DateTime? dateTime;
   final String address;
   final String status;
-
+  final int recordingChunkCount;
+  final String recordingName;
+  final String recordingSavedAt;
   final bool hasRecording;
   final DocumentReference<Map<String, dynamic>> eventRef;
 
-  const _HistoryCard({
+  const _ExpandableHistoryCard({
     required this.dateTime,
     required this.address,
     required this.status,
-
+    required this.recordingChunkCount,
+    required this.recordingName,
+    required this.recordingSavedAt,
     required this.hasRecording,
     required this.eventRef,
-
   });
-
-  Color get _statusColor {
-    switch (status.toLowerCase()) {
-      case "resolved":
-        return const Color(0xFF2CB25A);
-      case "cancelled":
-        return AppColors.textDark.withOpacity(0.4);
-      default:
-        return AppColors.accent;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +203,6 @@ class _HistoryCard extends StatelessWidget {
         : "Unknown time";
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -213,10 +214,15 @@ class _HistoryCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          iconColor: AppColors.primary,
+          collapsedIconColor: AppColors.textDark.withOpacity(0.4),
+          leading: Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
@@ -229,58 +235,172 @@ class _HistoryCard extends StatelessWidget {
               size: 22,
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
+          title: Text(
+            formattedDate,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          subtitle: Text(
+            address,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textDark.withOpacity(0.55),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            // ---- Expanded details ----
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  formattedDate,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
+                // Status
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: AppColors.textDark,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Status: ",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark.withOpacity(0.7),
+                      ),
+                    ),
+                    Text(
+                      status,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _statusColor,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  address,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textDark.withOpacity(0.55),
-                  ),
+                const SizedBox(height: 10),
+
+                // Location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.location_on_rounded,
+                      size: 16,
+                      color: AppColors.textDark,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Location:",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            address,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textDark.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 10),
 
-
+                // Recording info
                 if (hasRecording) ...[
-                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.audio_file_rounded,
+                        size: 16,
+                        color: AppColors.textDark,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Recording:",
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textDark.withOpacity(0.7),
+                              ),
+                            ),
+                            if (recordingName.isNotEmpty)
+                              Text(
+                                recordingName,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.textDark.withOpacity(0.6),
+                                ),
+                              ),
+                            if (recordingSavedAt.isNotEmpty)
+                              Text(
+                                "Saved: $recordingSavedAt",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textDark.withOpacity(0.5),
+                                ),
+                              ),
+                            if (recordingChunkCount > 0)
+                              Text(
+                                "Chunks: $recordingChunkCount",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textDark.withOpacity(0.5),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   _RecordingPlayButton(eventRef: eventRef),
+                  const SizedBox(height: 4),
                 ],
-
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: _statusColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: _statusColor,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  Color get _statusColor {
+    switch (status.toLowerCase()) {
+      case "resolved":
+        return const Color(0xFF2CB25A);
+      case "cancelled":
+        return AppColors.textDark.withOpacity(0.4);
+      default:
+        return AppColors.accent;
+    }
+  }
 }
 
+// ============================================================
+// RECORDING PLAY BUTTON
+// ============================================================
 class _RecordingPlayButton extends StatefulWidget {
   final DocumentReference<Map<String, dynamic>> eventRef;
   const _RecordingPlayButton({required this.eventRef});
@@ -320,31 +440,32 @@ class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
       final eventSnap = await widget.eventRef.get();
       final data = eventSnap.data();
 
-      // Legacy fallback: a couple of early recordings were saved as a
-      // single "recordingBase64" field before chunking was added.
-      final legacy = data?["recordingBase64"] as String?;
+      // Try to get recording from chunks sub-collection
+      final chunksSnap = await widget.eventRef
+          .collection("recording_chunks")
+          .orderBy("index")
+          .get();
 
-      String base64Audio;
-      if (legacy != null && legacy.trim().isNotEmpty) {
-        base64Audio = legacy;
-      } else {
-        final chunksSnap = await widget.eventRef
-            .collection("recording_chunks")
-            .orderBy("index")
-            .get();
-
-        if (chunksSnap.docs.isEmpty) {
-          throw Exception("No recording found");
+      if (chunksSnap.docs.isEmpty) {
+        // Try legacy field
+        final legacy = data?["recordingBase64"] as String?;
+        if (legacy != null && legacy.trim().isNotEmpty) {
+          final bytes = base64Decode(legacy);
+          await _player.play(BytesSource(bytes));
+          setState(() => isLoading = false);
+          return;
         }
-
-        base64Audio = chunksSnap.docs
-            .map((d) => d.data()["data"] as String)
-            .join();
+        throw Exception("No recording found");
       }
+
+      // Build base64 from chunks
+      final base64Audio = chunksSnap.docs
+          .map((d) => d.data()["data"] as String)
+          .join();
 
       final bytes = base64Decode(base64Audio);
       await _player.play(BytesSource(bytes));
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Couldn't play recording.")),
@@ -409,7 +530,9 @@ class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
   }
 }
 
-
+// ============================================================
+// EMPTY STATE
+// ============================================================
 class _EmptyState extends StatelessWidget {
   final String message;
   const _EmptyState({required this.message});

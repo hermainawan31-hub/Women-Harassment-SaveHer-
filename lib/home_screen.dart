@@ -105,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen>
             (data?["contact3Phone"] ?? "").toString().isNotEmpty &&
             (data?["contact3Relation"] ?? "").toString().isNotEmpty;
 
-        // ✅ LOCATION CHECK ADDED
+        //  LOCATION CHECK ADDED
         isLocationActive = (data?["locationActive"] ?? false) == true;
 
         contact1Phone = data?["contact1Phone"];

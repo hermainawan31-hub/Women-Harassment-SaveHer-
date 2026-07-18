@@ -1,0 +1,16 @@
+# flutter_native_splash.yaml
+flutter_native_splash:
+  color: "#880E4F"  # Pink/Red color (your primaryDark)
+  image: assets/images/new_logo.jpeg
+  android: true
+  ios: true
+  web: false
+
+  # Android 12+ specific settings (optional)
+  android_12:
+    color: "#880E4F"
+    image: assets/images/new_logo.jpeg
+  flutter_native_splash:
+  color: "#E91E63"  # Your primary color
+  android: true
+  ios: true
