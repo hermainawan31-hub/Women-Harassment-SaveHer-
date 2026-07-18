@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'app_colors.dart';
 
@@ -325,57 +328,94 @@ class _ExpandableHistoryCard extends StatelessWidget {
 
                 // Recording info
                 if (hasRecording) ...[
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.audio_file_rounded,
-                        size: 16,
-                        color: AppColors.textDark,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.1),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "Recording:",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textDark.withOpacity(0.7),
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.audio_file_rounded,
+                                size: 18,
+                                color: AppColors.primary,
                               ),
                             ),
-                            if (recordingName.isNotEmpty)
-                              Text(
-                                recordingName,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: AppColors.textDark.withOpacity(0.6),
-                                ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Recording",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textDark.withOpacity(0.75),
+                                    ),
+                                  ),
+                                  if (recordingName.isNotEmpty)
+                                    Text(
+                                      recordingName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: AppColors.textDark.withOpacity(0.6),
+                                      ),
+                                    ),
+                                  if (recordingSavedAt.isNotEmpty)
+                                    Text(
+                                      "Saved: $recordingSavedAt",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textDark.withOpacity(0.5),
+                                      ),
+                                    ),
+                                  if (recordingChunkCount > 0)
+                                    Text(
+                                      "Chunks: $recordingChunkCount",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textDark.withOpacity(0.5),
+                                      ),
+                                    ),
+                                ],
                               ),
-                            if (recordingSavedAt.isNotEmpty)
-                              Text(
-                                "Saved: $recordingSavedAt",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textDark.withOpacity(0.5),
-                                ),
-                              ),
-                            if (recordingChunkCount > 0)
-                              Text(
-                                "Chunks: $recordingChunkCount",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textDark.withOpacity(0.5),
-                                ),
-                              ),
+                            ),
                           ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _RecordingPlayButton(eventRef: eventRef),
+                            ),
+                            const SizedBox(width: 10),
+                            _RecordingSendButton(
+                              eventRef: eventRef,
+                              recordingName: recordingName,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  _RecordingPlayButton(eventRef: eventRef),
                   const SizedBox(height: 4),
                 ],
               ],
@@ -486,44 +526,169 @@ class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: isLoading ? null : _toggle,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primary,
-                    ),
-                  )
-                : Icon(
-                    isPlaying
-                        ? Icons.pause_circle_filled
-                        : Icons.play_circle_fill,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-            const SizedBox(width: 6),
-            Text(
-              isPlaying ? "Playing…" : "Play recording",
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : _toggle,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      isPlaying
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_fill,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+              const SizedBox(width: 8),
+              Text(
+                isPlaying ? "Playing…" : "Play recording",
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// RECORDING SEND BUTTON (Share via WhatsApp/SMS/etc.)
+// ============================================================
+class _RecordingSendButton extends StatefulWidget {
+  final DocumentReference<Map<String, dynamic>> eventRef;
+  final String recordingName;
+  const _RecordingSendButton({
+    required this.eventRef,
+    required this.recordingName,
+  });
+
+  @override
+  State<_RecordingSendButton> createState() => _RecordingSendButtonState();
+}
+
+class _RecordingSendButtonState extends State<_RecordingSendButton> {
+  bool isLoading = false;
+
+  Future<void> _send() async {
+    setState(() => isLoading = true);
+    try {
+      final eventSnap = await widget.eventRef.get();
+      final data = eventSnap.data();
+
+      // Try to get recording from chunks sub-collection
+      final chunksSnap = await widget.eventRef
+          .collection("recording_chunks")
+          .orderBy("index")
+          .get();
+
+      List<int> bytes;
+      if (chunksSnap.docs.isNotEmpty) {
+        final base64Audio = chunksSnap.docs
+            .map((d) => d.data()["data"] as String)
+            .join();
+        bytes = base64Decode(base64Audio);
+      } else {
+        final legacy = data?["recordingBase64"] as String?;
+        if (legacy != null && legacy.trim().isNotEmpty) {
+          bytes = base64Decode(legacy);
+        } else {
+          throw Exception("No recording found");
+        }
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final fileName = widget.recordingName.isNotEmpty
+          ? widget.recordingName
+          : "sos_recording_${DateTime.now().millisecondsSinceEpoch}.m4a";
+      final filePath = "${tempDir.path}/$fileName";
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: "SOS recording",
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't send recording.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : _send,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.35),
+              width: 1.4,
             ),
-          ],
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryDark.withOpacity(0.08),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              : const Icon(
+                  Icons.send_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
         ),
       ),
     );
