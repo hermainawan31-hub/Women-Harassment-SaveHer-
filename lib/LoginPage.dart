@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart'; 
 import 'home_screen.dart';
 import 'app_colors.dart';
 
@@ -30,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // ---------------- FORGOT PASSWORD (UPDATED) ----------------
+  // ---------------- FORGOT PASSWORD ----------------
   Future<void> resetPassword() async {
     final email = emailController.text.trim();
     if (email.isEmpty) {
@@ -42,7 +43,6 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await _auth.sendPasswordResetEmail(email: email);
 
-      // Show confirmation dialog
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -57,17 +57,10 @@ class _LoginPageState extends State<LoginPage> {
               style: TextButton.styleFrom(foregroundColor: AppColors.primary),
               onPressed: () {
                 Navigator.of(ctx).pop();
-                // Clear fields
+                // Clear fields (user will need to re-enter after reset)
                 emailController.clear();
                 passwordController.clear();
-                // If the user is somehow already signed in, go to home
-                if (_auth.currentUser != null) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  );
-                }
-                // Otherwise stay on login page (snackbar already shown)
+                // Do NOT navigate to HomeScreen here – user is not signed in
               },
               child: const Text("OK"),
             ),
@@ -108,21 +101,34 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text.trim(),
       );
 
+      // Force a fresh token to get latest emailVerified status
+      await userCredential.user!.getIdToken(true);
       await userCredential.user!.reload();
+
       final user = _auth.currentUser;
 
       if (user != null && user.emailVerified) {
-        // No manual navigation needed here — AuthGate in main.dart listens
-        // to FirebaseAuth.authStateChanges() and will automatically swap
-        // to HomeScreen the moment sign-in succeeds.
+        // Save login state for auto-login on next start
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+
+        // Navigate to HomeScreen
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
       } else {
         await _auth.signOut();
-        _showSnackBar("Please verify your email first.");
+        _showSnackBar(
+          "Please verify your email first. Check your inbox for the verification link.",
+        );
       }
     } on FirebaseAuthException catch (e) {
       _showSnackBar(e.message ?? "Login failed");
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
