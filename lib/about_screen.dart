@@ -1,24 +1,15 @@
 import 'package:flutter/material.dart';
-
 import 'app_colors.dart';
+import 'custom_app_bar.dart'; // new import
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
   static const List<_Feature> _features = [
-    _Feature(
-      Icons.location_on_rounded,
-      "Live location sharing with trusted contacts",
-    ),
-    _Feature(
-      Icons.contact_emergency_rounded,
-      "One-tap access to emergency contacts",
-    ),
+    _Feature(Icons.location_on_rounded, "Live location sharing with trusted contacts"),
+    _Feature(Icons.contact_emergency_rounded, "One-tap access to emergency contacts"),
     _Feature(Icons.history_rounded, "SOS alert history, always at hand"),
-    _Feature(
-      Icons.health_and_safety_rounded,
-      "Practical, everyday safety guidance",
-    ),
+    _Feature(Icons.health_and_safety_rounded, "Practical, everyday safety guidance"),
   ];
 
   @override
@@ -26,31 +17,19 @@ class AboutScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "About",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'About'),
       body: SingleChildScrollView(
         child: Column(
           children: [
             // ---- Gradient header with app mark ----
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 90, 20, 32),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                MediaQuery.of(context).padding.top + kToolbarHeight,
+                20,
+                32,
+              ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -108,13 +87,11 @@ class AboutScreen extends StatelessWidget {
                 ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ---- Mission statement ----
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
@@ -140,7 +117,6 @@ class AboutScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 22),
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 10),
@@ -154,8 +130,6 @@ class AboutScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // ---- Feature list ----
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -211,7 +185,6 @@ class AboutScreen extends StatelessWidget {
                       }),
                     ),
                   ),
-
                   const SizedBox(height: 22),
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 10),
@@ -225,7 +198,6 @@ class AboutScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -314,7 +286,6 @@ class AboutScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
                   Center(
                     child: Text(

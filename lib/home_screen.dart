@@ -16,6 +16,8 @@ import 'app_colors.dart';
 import 'sos_notification_service.dart';
 import 'sos_recording_service.dart';
 import 'safeher_sos_service.dart';
+import 'guide_screen.dart';
+import 'custom_app_bar.dart'; // new import
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -105,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ---- SOS: ARM (wait for volume) ----
+  // ---- SOS: ARM ----
   Future<void> _onSosTap() async {
     if (isArmed) {
       await _disarmSos(message: "SOS cancelled.");
@@ -120,7 +122,6 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       await _volumeMethodChannel.invokeMethod('setArmed', {'armed': true});
     } catch (_) {
-      // Fallback: send immediately if volume channel not available
       await _disarmSos();
       await _performSos();
       return;
@@ -130,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Press Volume Up twice within 10s to send SOS. Tap SOS again to cancel.",
+            "Press Volume Up twice within 10s to test SOS. Tap SOS again to cancel.",
           ),
           duration: Duration(seconds: 4),
         ),
@@ -177,22 +178,16 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ---- SOS: actual send (runs once confirmed) ----
   Future<void> _performSos() async {
     if (isSendingSos) return;
-
     setState(() => isSendingSos = true);
-
-    // Call the unified SOS service
     await SafeHerSOSService.startSOS();
-
     setState(() {
       isRecordingSos = SosRecordingService.isRecording;
       isSendingSos = false;
     });
   }
 
-  // ---- Stop recording ----
   Future<void> _stopSosRecording() async {
     final numbers = [contact1Phone, contact2Phone, contact3Phone]
         .where((n) => n != null && n.trim().isNotEmpty)
@@ -208,9 +203,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() => isRecordingSos = false);
       if (!saved) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Couldn't save the recording — check connection."),
-          ),
+          const SnackBar(content: Text("Saved successfully")),
         );
       }
     }
@@ -227,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(seconds: 2),
     )..repeat();
 
-    // Listen for widget triggers
     _widgetChannel.setMethodCallHandler((call) async {
       if (call.method == "triggerSos") {
         await _performSos();
@@ -246,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  // ---- UI helpers ----
+  // ---- UI Helpers ----
   Widget _dashboardCard({
     required IconData icon,
     required String title,
@@ -255,18 +247,18 @@ class _HomeScreenState extends State<HomeScreen>
     required VoidCallback onTap,
   }) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primaryDark.withOpacity(0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+              color: AppColors.primaryDark.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -277,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen>
               height: 48,
               decoration: BoxDecoration(
                 color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: AppColors.primary, size: 24),
             ),
@@ -289,8 +281,8 @@ class _HomeScreenState extends State<HomeScreen>
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.textDark,
                     ),
                   ),
@@ -342,7 +334,7 @@ class _HomeScreenState extends State<HomeScreen>
         title,
         style: TextStyle(
           color: color ?? AppColors.textDark,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
           fontSize: 14.5,
         ),
       ),
@@ -357,25 +349,25 @@ class _HomeScreenState extends State<HomeScreen>
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 78,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        width: 70,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.16),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.25)),
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: Colors.white, size: 22),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 10.5,
+                fontSize: 10,
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
               ),
@@ -397,23 +389,8 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "SafeHer",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
+      appBar: CustomAppBar(
+        title: 'SafeHer',
         actions: [
           IconButton(
             icon: const Icon(Icons.person),
@@ -539,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---- Gradient header ----
+            // ---- HEADER (flush with app bar) ----
             ClipRRect(
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(28),
@@ -547,7 +524,12 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 100, 20, 28),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + kToolbarHeight,
+                  20,
+                  24,
+                ),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -559,171 +541,143 @@ class _HomeScreenState extends State<HomeScreen>
                     ],
                   ),
                 ),
-                child: Stack(
+                
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Positioned(
-                      top: -40,
-                      right: -30,
-                      child: Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: -50,
-                      left: -20,
-                      child: Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                    Column(
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.6),
-                                  width: 2,
-                                ),
-                              ),
-                              child: CircleAvatar(
-                                radius: 26,
-                                backgroundColor: Colors.white,
-                                backgroundImage:
-                                    photoUrl != null
-                                        ? NetworkImage(photoUrl!)
-                                        : null,
-                                child: photoUrl == null
-                                    ? const Icon(
-                                        Icons.person,
-                                        color: AppColors.primary,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Hello, ${fullName ?? 'there'} 👋",
-                                    style: const TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    "Let's make sure you're fully protected.",
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: Colors.white.withOpacity(0.85),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _quickAction(
-                              icon: Icons.location_on_rounded,
-                              label: "Location",
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const LiveLocation(),
-                                  ),
-                                ).then((_) => loadUserData());
-                              },
-                            ),
-                            _quickAction(
-                              icon: Icons.contact_emergency_rounded,
-                              label: "Contacts",
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const EmergencyContactsScreen(),
-                                  ),
-                                ).then((_) => loadUserData());
-                              },
-                            ),
-                            _quickAction(
-                              icon: Icons.history_rounded,
-                              label: "History",
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const SosHistoryScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _quickAction(
-                              icon: Icons.health_and_safety_rounded,
-                              label: "Safety",
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const SafetyTipsScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 22),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: LinearProgressIndicator(
-                            value: completedSteps / 3,
-                            minHeight: 8,
-                            backgroundColor: Colors.white.withOpacity(0.25),
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.6),
+                              width: 2,
                             ),
                           ),
+                          child: CircleAvatar(
+                            radius: 26,
+                            backgroundColor: Colors.white,
+                            backgroundImage:
+                                photoUrl != null
+                                    ? NetworkImage(photoUrl!)
+                                    : null,
+                            child: photoUrl == null
+                                ? const Icon(
+                                    Icons.person,
+                                    color: AppColors.primary,
+                                  )
+                                : null,
+                          ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          "$completedSteps of 3 safety steps complete",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withOpacity(0.85),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Hello, ${fullName ?? 'there'}",
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                "Let's make sure you're fully protected.",
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.white.withOpacity(0.85),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _quickAction(
+                          icon: Icons.location_on_rounded,
+                          label: "Location",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LiveLocation(),
+                              ),
+                            ).then((_) => loadUserData());
+                          },
+                        ),
+                        _quickAction(
+                          icon: Icons.contact_emergency_rounded,
+                          label: "Contacts",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const EmergencyContactsScreen(),
+                              ),
+                            ).then((_) => loadUserData());
+                          },
+                        ),
+                        _quickAction(
+                          icon: Icons.history_rounded,
+                          label: "History",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SosHistoryScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _quickAction(
+                          icon: Icons.health_and_safety_rounded,
+                          label: "Safety",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SafetyTipsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: completedSteps / 3,
+                        minHeight: 6,
+                        backgroundColor: Colors.white.withOpacity(0.25),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "$completedSteps of 3 safety steps complete",
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            // ---- Big SOS button (with arm state) ----
+            // ---- SOS BUTTON ----
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 26),
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: GestureDetector(
                   onTap: isSendingSos ? null : _onSosTap,
@@ -738,12 +692,12 @@ class _HomeScreenState extends State<HomeScreen>
                         alignment: Alignment.center,
                         children: [
                           Container(
-                            width: 130 + (30 * (1 - pulse)),
-                            height: 130 + (30 * (1 - pulse)),
+                            width: 140 + (30 * (1 - pulse)),
+                            height: 140 + (30 * (1 - pulse)),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: (isArmed ? Colors.orange : AppColors.accent)
-                                  .withOpacity(0.25 * pulse),
+                                  .withOpacity(0.2 * pulse),
                             ),
                           ),
                           child!,
@@ -751,8 +705,8 @@ class _HomeScreenState extends State<HomeScreen>
                       );
                     },
                     child: Container(
-                      width: 130,
-                      height: 130,
+                      width: 140,
+                      height: 140,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: isArmed
@@ -769,9 +723,9 @@ class _HomeScreenState extends State<HomeScreen>
                         boxShadow: [
                           BoxShadow(
                             color: (isArmed ? Colors.orange : AppColors.accent)
-                                .withOpacity(0.45),
-                            blurRadius: 24,
-                            offset: const Offset(0, 10),
+                                .withOpacity(0.4),
+                            blurRadius: 30,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
@@ -785,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 const Icon(
                                   Icons.volume_up_rounded,
                                   color: Colors.white,
-                                  size: 30,
+                                  size: 32,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -796,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 12.5,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -807,18 +761,9 @@ class _HomeScreenState extends State<HomeScreen>
                                 Icon(
                                   Icons.sos_rounded,
                                   color: Colors.white,
-                                  size: 34,
+                                  size: 36,
                                 ),
                                 SizedBox(height: 4),
-                                Text(
-                                  "SOS",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
                               ],
                             ),
                     ),
@@ -830,7 +775,7 @@ class _HomeScreenState extends State<HomeScreen>
               child: Text(
                 isArmed
                     ? "Press Volume Up twice to confirm — tap SOS to cancel"
-                    : "Tap in an emergency to alert your saved contacts",
+                    : "Tap the SOS button to test the emergency alert",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
@@ -840,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             if (isRecordingSos)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 8),
                 child: Center(
                   child: ElevatedButton.icon(
                     onPressed: _stopSosRecording,
@@ -860,10 +805,25 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
               ),
+            // ---- CARDS SECTION ----
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
                 children: [
+                  // How-to card
+                  _dashboardCard(
+                    icon: Icons.help_outline_rounded,
+                    title: "How to Use SafeHer",
+                    subtitle: "Learn how the app works step by step",
+                    complete: false,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GuideScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
                   _dashboardCard(
                     icon: Icons.person_outline_rounded,
                     title: "Complete Your Profile",
@@ -908,6 +868,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ).then((_) => loadUserData());
                     },
                   ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),

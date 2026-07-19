@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'app_colors.dart';
+import 'custom_app_bar.dart';
 
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
@@ -48,25 +48,20 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         "contact1Name": contact1NameController.text.trim(),
         "contact1Phone": contact1PhoneController.text.trim(),
         "contact1Relation": contact1RelationController.text.trim(),
-
         "contact2Name": contact2NameController.text.trim(),
         "contact2Phone": contact2PhoneController.text.trim(),
         "contact2Relation": contact2RelationController.text.trim(),
-
         "contact3Name": contact3NameController.text.trim(),
         "contact3Phone": contact3PhoneController.text.trim(),
         "contact3Relation": contact3RelationController.text.trim(),
       }, SetOptions(merge: true));
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Emergency Contacts Saved")));
-
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Emergency Contacts Saved")));
       Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -75,18 +70,15 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     if (user == null) return;
 
     final doc = await _firestore.collection("users").doc(user.uid).get();
-
     final data = doc.data();
 
     if (data != null) {
       contact1NameController.text = data["contact1Name"] ?? "";
       contact1PhoneController.text = data["contact1Phone"] ?? "";
       contact1RelationController.text = data["contact1Relation"] ?? "";
-
       contact2NameController.text = data["contact2Name"] ?? "";
       contact2PhoneController.text = data["contact2Phone"] ?? "";
       contact2RelationController.text = data["contact2Relation"] ?? "";
-
       contact3NameController.text = data["contact3Name"] ?? "";
       contact3PhoneController.text = data["contact3Phone"] ?? "";
       contact3RelationController.text = data["contact3Relation"] ?? "";
@@ -142,7 +134,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     );
   }
 
-  // ---------------- CONTACT GROUP CARD ----------------
   Widget _contactCard({
     required int number,
     required TextEditingController nameController,
@@ -253,25 +244,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "Emergency Contacts",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'Emergency Contacts'),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -279,12 +252,21 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               // ---- Gradient intro header ----
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 90, 20, 28),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + kToolbarHeight,
+                  20,
+                  28,
+                ),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [AppColors.primaryDark, AppColors.primary],
+                    colors: [
+                      AppColors.primaryDark,
+                      AppColors.primary,
+                      AppColors.accent,
+                    ],
                   ),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(28),
@@ -321,7 +303,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   ],
                 ),
               ),
-
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -347,7 +328,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                       relationController: contact3RelationController,
                       complete: _c3Complete,
                     ),
-
                     SizedBox(
                       width: double.infinity,
                       height: 54,
@@ -415,15 +395,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     contact1NameController.dispose();
     contact1PhoneController.dispose();
     contact1RelationController.dispose();
-
     contact2NameController.dispose();
     contact2PhoneController.dispose();
     contact2RelationController.dispose();
-
     contact3NameController.dispose();
     contact3PhoneController.dispose();
     contact3RelationController.dispose();
-
     super.dispose();
   }
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'app_colors.dart';
 import 'LoginPage.dart';
+import 'custom_app_bar.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,8 +14,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Local preference toggles (UI only — wire to Firestore/shared_preferences
-  // later if you want these to actually persist and take effect).
   bool notificationsEnabled = true;
   bool locationSharingEnabled = true;
   bool sosSoundEnabled = true;
@@ -97,7 +95,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ---------------- SECTION HEADER ----------------
   Widget _sectionLabel(String text) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
@@ -113,7 +110,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ---------------- CARD CONTAINER FOR A GROUP OF ROWS ----------------
   Widget _groupCard(List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
@@ -132,12 +128,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _divider() => Divider(
-    height: 1,
-    indent: 60,
-    color: AppColors.textDark.withOpacity(0.06),
-  );
+        height: 1,
+        indent: 60,
+        color: AppColors.textDark.withOpacity(0.06),
+      );
 
-  // ---------------- TAPPABLE ROW ----------------
   Widget _tile({
     required IconData icon,
     required String title,
@@ -175,8 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             )
           : null,
-      trailing:
-          trailing ??
+      trailing: trailing ??
           (onTap != null
               ? Icon(
                   Icons.arrow_forward_ios,
@@ -187,7 +181,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ---------------- TOGGLE ROW ----------------
   Widget _toggleTile({
     required IconData icon,
     required String title,
@@ -214,36 +207,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "Settings",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'Settings'),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ---- Gradient header with account summary ----
+            // ---- Gradient header (flush with app bar) ----
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 90, 20, 28),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                MediaQuery.of(context).padding.top + kToolbarHeight,
+                20,
+                28,
+              ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [AppColors.primaryDark, AppColors.primary],
+                  colors: [
+                    AppColors.primaryDark,
+                    AppColors.primary,
+                    AppColors.accent,
+                  ],
                 ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(28),
@@ -292,7 +277,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -307,7 +291,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: _changePassword,
                     ),
                   ]),
-
                   _sectionLabel("Safety & Privacy"),
                   _groupCard([
                     _toggleTile(
@@ -327,7 +310,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (v) => setState(() => sosSoundEnabled = v),
                     ),
                   ]),
-
                   _sectionLabel("Preferences"),
                   _groupCard([
                     _toggleTile(
@@ -339,7 +321,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           setState(() => notificationsEnabled = v),
                     ),
                   ]),
-
                   _sectionLabel("Support"),
                   _groupCard([
                     _tile(
@@ -354,7 +335,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () => _showSnackBar("Privacy policy coming soon"),
                     ),
                   ]),
-
                   _sectionLabel("Account Actions"),
                   _groupCard([
                     _tile(
@@ -364,7 +344,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: _logout,
                     ),
                   ]),
-
                   const SizedBox(height: 20),
                   Center(
                     child: Text(

@@ -8,8 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-
 import 'app_colors.dart';
+import 'custom_app_bar.dart';
 
 class SosHistoryScreen extends StatelessWidget {
   const SosHistoryScreen({super.key});
@@ -21,35 +21,27 @@ class SosHistoryScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "SOS History",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'SOS History'),
       body: Column(
         children: [
           // ---- Gradient header ----
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 90, 20, 26),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              MediaQuery.of(context).padding.top + kToolbarHeight,
+              20,
+              26,
+            ),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [AppColors.primaryDark, AppColors.primary],
+                colors: [
+                  AppColors.primaryDark,
+                  AppColors.primary,
+                  AppColors.accent,
+                ],
               ),
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(28),
@@ -81,7 +73,6 @@ class SosHistoryScreen extends StatelessWidget {
               ],
             ),
           ),
-
           // ---- List ----
           Expanded(
             child: user == null
@@ -129,7 +120,6 @@ class SosHistoryScreen extends StatelessWidget {
                           final data = docs[index].data();
                           final eventRef = docs[index].reference;
 
-                          // ✅ FIELDS FROM YOUR FIRESTORE
                           final Timestamp? ts = data["timestamp"] as Timestamp?;
                           final DateTime? dateTime = ts?.toDate();
 
@@ -256,7 +246,6 @@ class _ExpandableHistoryCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           children: [
-            // ---- Expanded details ----
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -288,7 +277,6 @@ class _ExpandableHistoryCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-
                 // Location
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +313,6 @@ class _ExpandableHistoryCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-
                 // Recording info
                 if (hasRecording) ...[
                   Container(
@@ -480,14 +467,12 @@ class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
       final eventSnap = await widget.eventRef.get();
       final data = eventSnap.data();
 
-      // Try to get recording from chunks sub-collection
       final chunksSnap = await widget.eventRef
           .collection("recording_chunks")
           .orderBy("index")
           .get();
 
       if (chunksSnap.docs.isEmpty) {
-        // Try legacy field
         final legacy = data?["recordingBase64"] as String?;
         if (legacy != null && legacy.trim().isNotEmpty) {
           final bytes = base64Decode(legacy);
@@ -498,7 +483,6 @@ class _RecordingPlayButtonState extends State<_RecordingPlayButton> {
         throw Exception("No recording found");
       }
 
-      // Build base64 from chunks
       final base64Audio = chunksSnap.docs
           .map((d) => d.data()["data"] as String)
           .join();
@@ -605,7 +589,6 @@ class _RecordingSendButtonState extends State<_RecordingSendButton> {
       final eventSnap = await widget.eventRef.get();
       final data = eventSnap.data();
 
-      // Try to get recording from chunks sub-collection
       final chunksSnap = await widget.eventRef
           .collection("recording_chunks")
           .orderBy("index")

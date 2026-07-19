@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
 import 'app_colors.dart';
+import 'custom_app_bar.dart';
 
 class SafetyTipsScreen extends StatelessWidget {
   const SafetyTipsScreen({super.key});
@@ -68,36 +68,28 @@ class SafetyTipsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "Safety Tips",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'Safety Tips'),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ---- Gradient header ----
+            // ---- Gradient header (flush with app bar) ----
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 90, 20, 26),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                MediaQuery.of(context).padding.top + kToolbarHeight,
+                20,
+                26,
+              ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [AppColors.primaryDark, AppColors.primary],
+                  colors: [
+                    AppColors.primaryDark,
+                    AppColors.primary,
+                    AppColors.accent,
+                  ],
                 ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(28),
@@ -129,7 +121,6 @@ class SafetyTipsScreen extends StatelessWidget {
                 ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(

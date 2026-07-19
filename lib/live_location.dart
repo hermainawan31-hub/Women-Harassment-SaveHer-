@@ -6,8 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlng;
-
 import 'app_colors.dart';
+import 'custom_app_bar.dart';
 
 class LiveLocation extends StatefulWidget {
   const LiveLocation({super.key});
@@ -19,20 +19,14 @@ class LiveLocation extends StatefulWidget {
 class _LiveLocationState extends State<LiveLocation> {
   bool locationEnabled = false;
   bool trackingStarted = false;
-
   String statusText = "Location is OFF";
-
   double? latitude;
   double? longitude;
   String? address;
 
   final MapController _mapController = MapController();
   StreamSubscription<Position>? _positionStream;
-
-  static const latlng.LatLng _defaultCenter = latlng.LatLng(
-    24.8607,
-    67.0011,
-  ); // fallback: Karachi
+  static const latlng.LatLng _defaultCenter = latlng.LatLng(24.8607, 67.0011);
 
   @override
   void dispose() {
@@ -40,44 +34,33 @@ class _LiveLocationState extends State<LiveLocation> {
     super.dispose();
   }
 
-  // ---------------- ENABLE LOCATION ----------------
   Future<void> enableLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
     if (!serviceEnabled) {
       await Geolocator.openLocationSettings();
       return;
     }
-
     LocationPermission permission = await Geolocator.checkPermission();
-
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-
-    if (permission == LocationPermission.deniedForever) {
-      return;
-    }
+    if (permission == LocationPermission.deniedForever) return;
 
     setState(() {
       locationEnabled = true;
       statusText = "Location is ON";
     });
 
-    // Show the user's current spot on the map immediately,
-    // even before "Start Location" tracking begins.
     final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
     _updateMapPosition(position);
   }
 
-  // ---------------- START LOCATION ----------------
   Future<void> startLocation() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Get an immediate fix first.
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
@@ -88,15 +71,12 @@ class _LiveLocationState extends State<LiveLocation> {
       statusText = "Live Location ON";
     });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Live Location Started")));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Live Location Started")));
 
-    // Then keep listening so the map/marker/address/Firestore
-    // update in real time as the device moves.
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5, // meters moved before an update fires
+      distanceFilter: 5,
     );
 
     _positionStream?.cancel();
@@ -108,7 +88,6 @@ class _LiveLocationState extends State<LiveLocation> {
         );
   }
 
-  // ---------------- STOP LOCATION ----------------
   Future<void> stopLocation() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -125,22 +104,18 @@ class _LiveLocationState extends State<LiveLocation> {
       statusText = "Live Location OFF";
     });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Live Location Stopped")));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Live Location Stopped")));
   }
 
-  // ---------------- SHARED: handle a new fix ----------------
   Future<void> _handleNewPosition(Position position, String uid) async {
     latitude = position.latitude;
     longitude = position.longitude;
 
-    // convert coordinates to address
     List<Placemark> placemarks = await placemarkFromCoordinates(
       latitude!,
       longitude!,
     );
-
     final newAddress =
         "${placemarks.first.street}, ${placemarks.first.locality}, ${placemarks.first.country}";
 
@@ -159,18 +134,12 @@ class _LiveLocationState extends State<LiveLocation> {
     _updateMapPosition(position);
   }
 
-  // ---------------- MAP: move camera + marker to the latest fix ----------------
   void _updateMapPosition(Position position) {
     final point = latlng.LatLng(position.latitude, position.longitude);
-
-    setState(
-      () {},
-    ); // refresh marker position (built from latitude/longitude below)
-
+    setState(() {});
     _mapController.move(point, 16);
   }
 
-  // ---------------- THEMED ACTION BUTTON ----------------
   Widget _actionButton({
     required String label,
     required IconData icon,
@@ -277,27 +246,9 @@ class _LiveLocationState extends State<LiveLocation> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F4FC),
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          "Live Location",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryDark, AppColors.primary],
-            ),
-          ),
-        ),
-      ),
+      appBar: const CustomAppBar(title: 'Live Location'),
       body: Column(
         children: [
-          // ---------------- MAP ----------------
           SizedBox(
             height: MediaQuery.of(context).padding.top + 320,
             child: Stack(
@@ -340,7 +291,6 @@ class _LiveLocationState extends State<LiveLocation> {
                     ),
                   ],
                 ),
-                // gentle top gradient so the AppBar text stays legible over map tiles
                 Positioned(
                   top: 0,
                   left: 0,
@@ -364,8 +314,6 @@ class _LiveLocationState extends State<LiveLocation> {
               ],
             ),
           ),
-
-          // ---------------- STATUS + CONTROLS ----------------
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -434,9 +382,7 @@ class _LiveLocationState extends State<LiveLocation> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   _actionButton(
                     label: "Turn ON Location",
                     icon: Icons.my_location_rounded,
@@ -444,14 +390,12 @@ class _LiveLocationState extends State<LiveLocation> {
                     filled: true,
                   ),
                   const SizedBox(height: 12),
-
                   _actionButton(
                     label: "Start Location",
                     icon: Icons.play_arrow_rounded,
                     onPressed: locationEnabled ? startLocation : null,
                   ),
                   const SizedBox(height: 12),
-
                   _actionButton(
                     label: "Stop Location",
                     icon: Icons.stop_rounded,
