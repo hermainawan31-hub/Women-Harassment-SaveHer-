@@ -270,8 +270,8 @@ Add screenshots inside:
 ```text
 documentation/screenshots/
 ```
-
 Recommended Screens:
+
 * App Logo
   <img width="720" height="1545" alt="image" src="https://github.com/user-attachments/assets/e0096b61-c9d3-4d08-b78e-f6b2dd927062" />
 
@@ -281,7 +281,6 @@ Recommended Screens:
 * Home Screen && SOS Screen
   <img width="720" height="1512" alt="image" src="https://github.com/user-attachments/assets/9469a3b3-8e11-4231-8d98-028b0453489e" />
   <img width="719" height="1437" alt="image" src="https://github.com/user-attachments/assets/063c9ce5-1df0-4adf-94e1-d100b0974280" />
-
 
 * Live Location
   <img width="720" height="1455" alt="image" src="https://github.com/user-attachments/assets/f9226e8c-7b8a-490e-8b3d-e590375f753c" />
